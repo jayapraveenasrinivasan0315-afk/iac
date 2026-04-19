@@ -66,18 +66,44 @@ jobs:
 
       - name: Grant Service Account Permissions
         run: |
-          SA_EMAIL="github-action-cicdsa-482@gwx-devops-internship.iam.gserviceaccount.com"
+          GITHUB_SA="github-action-cicdsa-482@gwx-devops-internship.iam.gserviceaccount.com"
+          CLOUD_RUN_SA="cloud-run-backend@gwx-devops-internship.iam.gserviceaccount.com"
           PROJECT="gwx-devops-internship"
           
-          # Grant Cloud Run permissions
+          # Grant GitHub Actions SA permissions
           gcloud projects add-iam-policy-binding $PROJECT \
-            --member="serviceAccount:$SA_EMAIL" \
+            --member="serviceAccount:$GITHUB_SA" \
+            --role="roles/artifactregistry.admin" \
+            --condition=None || true
+          
+          gcloud projects add-iam-policy-binding $PROJECT \
+            --member="serviceAccount:$GITHUB_SA" \
+            --role="roles/artifactregistry.reader" \
+            --condition=None || true
+          
+          gcloud projects add-iam-policy-binding $PROJECT \
+            --member="serviceAccount:$GITHUB_SA" \
             --role="roles/run.admin" \
             --condition=None || true
           
-          # Grant Artifact Registry permissions to pull images
           gcloud projects add-iam-policy-binding $PROJECT \
-            --member="serviceAccount:$SA_EMAIL" \
+            --member="serviceAccount:$GITHUB_SA" \
+            --role="roles/iam.serviceAccountTokenCreator" \
+            --condition=None || true
+          
+          gcloud projects add-iam-policy-binding $PROJECT \
+            --member="serviceAccount:$GITHUB_SA" \
+            --role="roles/iam.serviceAccountUser" \
+            --condition=None || true
+          
+          gcloud projects add-iam-policy-binding $PROJECT \
+            --member="serviceAccount:$GITHUB_SA" \
+            --role="roles/storage.admin" \
+            --condition=None || true
+          
+          # Grant Cloud Run SA permissions (to pull images at runtime)
+          gcloud projects add-iam-policy-binding $PROJECT \
+            --member="serviceAccount:$CLOUD_RUN_SA" \
             --role="roles/artifactregistry.reader" \
             --condition=None || true
 

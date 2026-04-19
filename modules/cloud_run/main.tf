@@ -18,6 +18,13 @@ resource "google_project_iam_member" "secret_accessor" {
   member  = "serviceAccount:${data.google_service_account.cloud_run_sa.email}"
 }
 
+# Artifact Registry Reader Role
+resource "google_project_iam_member" "artifact_registry_reader" {
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${data.google_service_account.cloud_run_sa.email}"
+}
+
 resource "google_cloud_run_v2_service" "backend" {
   name                   = var.cloud_run_service_name
   location               = var.region

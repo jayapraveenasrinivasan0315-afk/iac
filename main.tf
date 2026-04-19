@@ -80,3 +80,40 @@ module "load_balancer" {
     module.gcs
   ]
 }
+
+# GitHub Actions Service Account Permissions
+resource "google_project_iam_member" "github_actions_artifact_registry_admin" {
+  project = var.project_id
+  role    = "roles/artifactregistry.admin"
+  member  = "serviceAccount:github-action-cicdsa-482@${var.project_id}.iam.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "github_actions_artifact_registry_reader" {
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:github-action-cicdsa-482@${var.project_id}.iam.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "github_actions_run_admin" {
+  project = var.project_id
+  role    = "roles/run.admin"
+  member  = "serviceAccount:github-action-cicdsa-482@${var.project_id}.iam.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "github_actions_token_creator" {
+  project = var.project_id
+  role    = "roles/iam.serviceAccountTokenCreator"
+  member  = "serviceAccount:github-action-cicdsa-482@${var.project_id}.iam.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "github_actions_sa_user" {
+  project = var.project_id
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:github-action-cicdsa-482@${var.project_id}.iam.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "github_actions_storage_admin" {
+  project = var.project_id
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:github-action-cicdsa-482@${var.project_id}.iam.gserviceaccount.com"
+}
