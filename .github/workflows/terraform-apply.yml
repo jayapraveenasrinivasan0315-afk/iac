@@ -54,6 +54,18 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
+      - name: Enable Required GCP APIs
+        run: |
+          gcloud services enable \
+            compute.googleapis.com \
+            run.googleapis.com \
+            storage.googleapis.com \
+            iam.googleapis.com \
+            vpcaccess.googleapis.com \
+            secretmanager.googleapis.com \
+            cloudsql.googleapis.com \
+            --project=${{ env.PROJECT_ID }}
+
       - name: Initialize Terraform
         id: init
         env:
