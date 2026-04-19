@@ -1,4 +1,4 @@
-project_id              = "gw-devops-internship"
+project_id              = "gwx-devops-internship"
 environment             = "dev"
 team                    = "devops"
 region                  = "asia-south1"
