@@ -15,10 +15,10 @@ output "service_uri" {
 
 output "service_account_email" {
   description = "Service account email for Cloud Run"
-  value       = google_service_account.cloud_run_sa.email
+  value       = data.google_service_account.cloud_run_sa.email
 }
 
 output "service_account_id" {
   description = "Service account ID for Cloud Run"
-  value       = google_service_account.cloud_run_sa.id
+  value       = data.google_service_account.cloud_run_sa.id
 }

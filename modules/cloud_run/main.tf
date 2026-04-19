@@ -8,14 +8,14 @@ data "google_service_account" "cloud_run_sa" {
 resource "google_project_iam_member" "cloud_sql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
+  member  = "serviceAccount:${data.google_service_account.cloud_run_sa.email}"
 }
 
 # Secret Manager Accessor Role
 resource "google_project_iam_member" "secret_accessor" {
   project = var.project_id
   role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
+  member  = "serviceAccount:${data.google_service_account.cloud_run_sa.email}"
 }
 
 resource "google_cloud_run_v2_service" "backend" {
@@ -30,7 +30,7 @@ resource "google_cloud_run_v2_service" "backend" {
   }
 
   template {
-    service_account = google_service_account.cloud_run_sa.email
+    service_account = data.google_service_account.cloud_run_sa.email
 
     containers {
       image = var.container_image
@@ -51,7 +51,6 @@ resource "google_cloud_run_v2_service" "backend" {
   }
 
   depends_on = [
-    google_service_account.cloud_run_sa,
     google_project_iam_member.cloud_sql_client,
     google_project_iam_member.secret_accessor
   ]
