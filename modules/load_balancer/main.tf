@@ -46,7 +46,7 @@ resource "google_compute_health_check" "cloud_run_health" {
 }
 
 # Backend service for Cloud Run
-resource "google_compute_backend_service" "cloud_run_backend" {
+resource "google_compute_backend_service" "backend" {
   name                  = var.cloud_run_backend_name
   load_balancing_scheme = "EXTERNAL"
   protocol              = "HTTPS"
@@ -72,7 +72,6 @@ resource "google_compute_backend_bucket" "gcs_backend" {
     default_ttl          = 3600
     max_ttl              = 86400
     negative_caching     = true
-    negative_caching_ttl = 120
   }
 }
 

@@ -1,11 +1,11 @@
 output "static_ip_address" {
   description = "Static IP address for the load balancer"
-  value       = google_compute_address.static_ip.address
+  value       = google_compute_global_address.static_ip.address
 }
 
 output "static_ip_id" {
   description = "Static IP address ID"
-  value       = google_compute_address.static_ip.id
+  value       = google_compute_global_address.static_ip.id
 }
 
 output "https_proxy_id" {
@@ -20,7 +20,7 @@ output "url_map_id" {
 
 output "forwarding_rule_id" {
   description = "HTTPS forwarding rule ID"
-  value       = google_compute_global_forwarding_rule.https_lb_rule.id
+  value       = google_compute_global_forwarding_rule.https_forwarding_rule.id
 }
 
 output "ssl_certificate_id" {
