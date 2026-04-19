@@ -32,25 +32,12 @@ resource "google_compute_region_network_endpoint_group" "cloud_run_neg" {
   }
 }
 
-# Health check for Cloud Run backend
-resource "google_compute_health_check" "cloud_run_health" {
-  name = var.health_check_name
-
-  https_health_check {
-    port         = "443"
-    request_path = "/health"
-  }
-
-  check_interval_sec = 10
-  timeout_sec        = 5
-}
 
 # Backend service for Cloud Run
 resource "google_compute_backend_service" "backend" {
   name                  = var.cloud_run_backend_name
   load_balancing_scheme = "EXTERNAL"
   protocol              = "HTTPS"
-  health_checks         = [google_compute_health_check.cloud_run_health.id]
 
   backend {
     group = google_compute_region_network_endpoint_group.cloud_run_neg.id
