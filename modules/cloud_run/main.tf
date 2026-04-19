@@ -59,6 +59,7 @@ resource "google_cloud_run_v2_service" "backend" {
 
   depends_on = [
     google_project_iam_member.cloud_sql_client,
-    google_project_iam_member.secret_accessor
+    google_project_iam_member.secret_accessor,
+    google_project_iam_member.artifact_registry_reader
   ]
 }
