@@ -107,3 +107,35 @@ variable "domains" {
   description = "Domains for SSL certificate and routing"
   type        = list(string)
 }
+
+variable "sql_instance_name" {
+  description = "Cloud SQL instance name"
+  type        = string
+}
+
+variable "db_version" {
+  description = "Database version for Cloud SQL"
+  type        = string
+  default     = "POSTGRES_14"
+}
+
+variable "database_name" {
+  description = "Database name"
+  type        = string
+}
+
+variable "database_user" {
+  description = "Database username"
+  type        = string
+}
+
+variable "secure_password" {
+  description = "Database password"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_url_secret_id" {
+  description = "Secret Manager ID for DB URL"
+  type        = string
+}

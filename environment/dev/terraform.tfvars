@@ -20,3 +20,7 @@ min_instances           = 1
 max_instances           = 100
 domains                 = ["yourdomain.com", "www.yourdomain.com"]
 db_url_secret_id        = "db-url"
+sql_instance_name       = "myapp-sql-instance"
+database_name           = "myapp"
+database_user           = "myapp_user"
+secure_password         = "changeme123!"

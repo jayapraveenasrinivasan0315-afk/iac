@@ -50,3 +50,8 @@ variable "environment" {
   type        = string
   description = "Environment name (dev, staging, prod)"
 }
+
+variable "db_url_secret_id" {
+  description = "Secret Manager ID for DB URL"
+  type        = string
+}
