@@ -30,7 +30,7 @@ output "ssl_certificate_id" {
 
 output "backend_service_id" {
   description = "Cloud Run backend service ID"
-  value       = google_compute_backend_service.cloud_run_backend.id
+  value       = google_compute_backend_service.backend.id
 }
 
 output "gcs_backend_id" {

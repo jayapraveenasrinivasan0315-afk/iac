@@ -91,7 +91,7 @@ resource "google_compute_url_map" "https_lb_url_map" {
 
     path_rule {
       paths   = ["/api/*"]
-      service = google_compute_backend_service.cloud_run_backend.id
+      service = google_compute_backend_service.backend.id
     }
   }
 }
