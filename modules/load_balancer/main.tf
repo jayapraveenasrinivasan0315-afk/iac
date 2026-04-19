@@ -27,6 +27,9 @@ resource "google_compute_network_endpoint_group" "cloud_run_neg" {
   name                  = var.cloud_run_neg_name
   network_endpoint_type = "SERVERLESS"
   region                = var.region
+  cloud_run {
+    service = var.cloud_run_service_name
+  }
 }
 
 # Health check for Cloud Run

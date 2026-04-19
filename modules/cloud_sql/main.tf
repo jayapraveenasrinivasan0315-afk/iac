@@ -27,6 +27,7 @@ resource "google_sql_database_instance" "main" {
   }
 }
 
+
 resource "google_sql_database" "myapp" {
   name     = var.database_name
   instance = google_sql_database_instance.main.name
