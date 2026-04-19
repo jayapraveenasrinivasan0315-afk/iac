@@ -26,8 +26,7 @@ resource "google_compute_managed_ssl_certificate" "ssl_cert" {
 resource "google_compute_network_endpoint_group" "cloud_run_neg" {
   name                  = var.cloud_run_neg_name
   network_endpoint_type = "SERVERLESS"
-  network               = "default"
-  location              = var.region
+  region                = var.region
 }
 
 # Health check for Cloud Run
@@ -121,7 +120,7 @@ resource "google_compute_target_https_proxy" "https_proxy" {
 resource "google_compute_global_forwarding_rule" "https_lb_rule" {
   name                  = var.forwarding_rule_name
   load_balancing_scheme = "EXTERNAL"
-  address               = google_compute_address.static_ip.address
+  ip_address            = google_compute_address.static_ip.address
   target                = google_compute_target_https_proxy.https_proxy.id
   port_range            = "443"
 
@@ -151,7 +150,7 @@ resource "google_compute_target_http_proxy" "http_proxy" {
 resource "google_compute_global_forwarding_rule" "http_rule" {
   name                  = var.http_forwarding_rule_name
   load_balancing_scheme = "EXTERNAL"
-  address               = google_compute_address.static_ip.address
+  ip_address            = google_compute_address.static_ip.address
   target                = google_compute_target_http_proxy.http_proxy.id
   port_range            = "80"
 
