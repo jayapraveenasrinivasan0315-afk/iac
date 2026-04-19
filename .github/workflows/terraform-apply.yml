@@ -12,11 +12,19 @@ on:
           - dev
           - staging
           - prod
+      plan_run_number:
+        description: 'Run number of the plan workflow to apply (leave empty to run plan inline)'
+        required: false
+        type: string
 
 env:
-  TF_VERSION: 1.10.5
+  TF_VERSION: '1.10.5'
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  environment: ${{ github.event.inputs.environment }}
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read  # Required to download artifacts from other workflow runs
 
 jobs:
   terraform:
@@ -24,16 +32,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
 
-    permissions:
-      contents: read
-      id-token: write
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
@@ -42,16 +46,24 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
+          access_token_lifetime: '3600s'
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          PROJECT_ID: ${{ env.PROJECT_ID }}
+          project_id: ${{ env.PROJECT_ID }}
 
-      - name: Initialize Terraform (Dev)
-        run: terraform init -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" -backend-config="prefix=terraform/state/dev"
+      - name: Initialize Terraform
+        id: init
+        env:
+          TF_STATE_BUCKET: ${{ secrets.GCP_TF_STATE_BUCKET }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="prefix=terraform/state/${{ github.event.inputs.environment }}" \
+            -input=false
         working-directory: ./
-        if: github.event.inputs.environment == 'dev'
 
       - name: Validate Terraform
         run: terraform validate
@@ -62,44 +74,50 @@ jobs:
         working-directory: ./
         continue-on-error: true
 
-      - name: Plan Terraform (Dev)
+      # --- Path A: Download pre-built plan from a separate plan workflow run ---
+      - name: Download Plan Artifact
+        if: github.event.inputs.plan_run_number != ''
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: terraform-plan.yml
+          run_number: ${{ github.event.inputs.plan_run_number }}
+          name: tfplan-${{ github.event.inputs.environment }}-${{ github.event.inputs.plan_run_number }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- Path B: Run plan inline if no plan_run_number provided ---
+      - name: Plan Terraform (inline)
         id: plan
+        if: github.event.inputs.plan_run_number == ''
         run: |
           terraform plan \
-            -var-file="environment/dev/terraform.tfvars" \
-            -out=tfplan.binary
+            -var-file="environment/${{ github.event.inputs.environment }}/terraform.tfvars" \
+            -out=tfplan \
+            -input=false
         working-directory: ./
-        if: github.event.inputs.environment == 'dev'
-
-      - name: Show Plan
-        run: terraform show tfplan.binary
-        working-directory: ./
-        if: github.event.inputs.environment == 'dev'
 
       - name: Upload Plan Artifact
+        if: github.event.inputs.plan_run_number == ''
         uses: actions/upload-artifact@v3
         with:
-          name: tfplan-dev
-          path: tfplan.binary
+          name: tfplan-${{ github.event.inputs.environment }}
+          path: tfplan
           retention-days: 7
-        if: github.event.inputs.environment == 'dev'
 
-      - name: Request Approval for Apply
-        if: github.ref == 'refs/heads/main'
-        uses: trstringer/manual-approval@v1
-        with:
-          secret: ${{ secrets.GITHUB_TOKEN }}
-          approvers: "devops-team"
-          minimum-approvals: 1
-          issue-title: "Terraform Apply Approval Required for Dev Environment"
-          issue-body: "Please review the Terraform plan above and approve to proceed with apply."
+      - name: Show Plan
+        run: |
+          echo "## Plan to be Applied" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```terraform' >> $GITHUB_STEP_SUMMARY
+          terraform show tfplan >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        working-directory: ./
 
       - name: Comment PR with Plan
         uses: actions/github-script@v6
         if: github.event_name == 'pull_request'
         with:
           script: |
-            const planOutput = require('child_process').execSync('terraform show tfplan.binary', { cwd: './' }).toString();
+            const planOutput = require('child_process').execSync('terraform show tfplan', { cwd: './' }).toString();
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -107,12 +125,13 @@ jobs:
               body: `## Terraform Plan\n\`\`\`\n${planOutput.substring(0, 65000)}\n\`\`\``
             });
 
-      - name: Apply Terraform (Dev)
-        if: |
-          github.ref == 'refs/heads/main' &&
-          github.event.inputs.environment == 'dev'
+      - name: Apply Terraform
+        id: apply
         run: |
-          terraform apply -auto-approve tfplan.binary
+          terraform apply \
+            -auto-approve \
+            -input=false \
+            tfplan
         working-directory: ./
 
       - name: Export Terraform Outputs
@@ -122,49 +141,27 @@ jobs:
         working-directory: ./
 
       - name: Upload Outputs Artifact
+        if: success()
         uses: actions/upload-artifact@v3
         with:
-          name: terraform-outputs-dev
+          name: terraform-outputs-${{ github.event.inputs.environment }}
           path: terraform-outputs.json
           retention-days: 30
-        if: success()
 
-      - name: Notify Slack on Success
-        if: success()
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "✅ Terraform Apply Successful (Dev)",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Terraform Apply Completed Successfully*\n*Environment:* Dev\n*Commit:* ${{ github.sha }}\n*Author:* ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
-        continue-on-error: true
+      - name: Workflow Summary
+        if: always()
+        run: |
+          echo "## Terraform Apply Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Plan Run Number:** ${{ github.event.inputs.plan_run_number || 'inline' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Init:** ${{ steps.init.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Apply:** ${{ steps.apply.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.apply.outcome }}" == "success" ]; then
+            echo "✅ **Infrastructure successfully applied to ${{ github.event.inputs.environment }}!**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Apply failed. Check logs for details.**" >> $GITHUB_STEP_SUMMARY
+          fi
 
-      - name: Notify Slack on Failure
-        if: failure()
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "❌ Terraform Apply Failed (Dev)",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Terraform Apply Failed*\n*Environment:* Dev\n*Commit:* ${{ github.sha }}\n*Author:* ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
-        continue-on-error: true
+     
