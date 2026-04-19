@@ -118,3 +118,18 @@ resource "google_project_iam_member" "github_actions_storage_admin" {
   role    = "roles/storage.admin"
   member  = "serviceAccount:github-action-cicdsa-482@${var.project_id}.iam.gserviceaccount.com"
 }
+
+# Cloud Run Service Account Permissions
+resource "google_project_iam_member" "cloud_run_sa_artifact_registry" {
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:cloud-run-backend@${var.project_id}.iam.gserviceaccount.com"
+}
+
+resource "google_service_account_iam_member" "github_actions_sa_user_on_cloud_run_sa" {
+  service_account_id = "projects/${var.project_id}/serviceAccounts/cloud-run-backend@${var.project_id}.iam.gserviceaccount.com"
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:github-action-cicdsa-482@${var.project_id}.iam.gserviceaccount.com"
+
+  depends_on = [module.service_account]
+}
