@@ -14,18 +14,15 @@ on:
           - prod
 
 env:
-  TF_VERSION: 1.6.0
-  GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+  TF_VERSION: 1.10.5
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  environment: ${{ github.event.inputs.environment }}
 
 jobs:
   terraform:
     name: Terraform Apply
     runs-on: ubuntu-latest
-    
-    environment:
-      name: production-deploy
-      deployment-branch-policy:
-        protected-branches: true
+    environment: ${{ github.event.inputs.environment }}
 
     permissions:
       contents: read
@@ -41,12 +38,15 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
+        uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          PROJECT_ID: ${{ env.PROJECT_ID }}
 
       - name: Initialize Terraform (Dev)
         run: terraform init -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" -backend-config="prefix=terraform/state/dev"
@@ -82,7 +82,7 @@ jobs:
           name: tfplan-dev
           path: tfplan.binary
           retention-days: 7
-        if: github.event.inputs.environment == 'dev'
+        if: github.event.inputs.environment == 'dev'  
 
       - name: Request Approval for Apply
         if: |
