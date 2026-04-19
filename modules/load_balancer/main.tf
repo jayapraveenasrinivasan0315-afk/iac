@@ -15,10 +15,6 @@ resource "google_compute_managed_ssl_certificate" "ssl_cert" {
   managed {
     domains = var.domains
   }
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 # Network Endpoint Group for Cloud Run (Serverless NEG)
