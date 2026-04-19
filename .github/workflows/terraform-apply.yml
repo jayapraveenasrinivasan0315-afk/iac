@@ -62,8 +62,7 @@ jobs:
             storage.googleapis.com \
             iam.googleapis.com \
             vpcaccess.googleapis.com \
-            secretmanager.googleapis.com \
-            cloudsql.googleapis.com
+            secretmanager.googleapis.com
 
       - name: Initialize Terraform
         id: init
