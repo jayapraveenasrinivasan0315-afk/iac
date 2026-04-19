@@ -3,15 +3,6 @@ terraform {
   backend "gcs" {}
 }
 
-# Artifact Registry Repository for container images
-resource "google_artifact_registry_repository" "docker_repo" {
-  location      = var.region
-  repository_id = "backendrepo"
-  description   = "Docker repository for backend container images"
-  format        = "DOCKER"
-  project       = var.project_id
-}
-
 module "vpc" {
   source = "./modules/vpc"
 
