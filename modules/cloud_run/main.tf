@@ -1,7 +1,7 @@
-resource "google_service_account" "cloud_run_sa" {
-  account_id   = var.service_account_id
-  display_name = "Cloud Run Service Account"
-  description  = "Service account for Cloud Run backend service"
+# Reference the existing service account (created outside Terraform)
+data "google_service_account" "cloud_run_sa" {
+  account_id = var.service_account_id
+  project    = var.project_id
 }
 
 # Cloud SQL Client Role

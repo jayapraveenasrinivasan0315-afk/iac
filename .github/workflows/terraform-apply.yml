@@ -79,6 +79,16 @@ jobs:
         run: terraform validate
         working-directory: ./
 
+      - name: Import Existing Resources
+        run: |
+          # Import the service account if it exists (gracefully handle if not)
+          terraform import -allow-missing-config \
+            'module.cloud_run.google_service_account.cloud_run_sa' \
+            'projects/gwx-devops-internship/serviceAccounts/cloud-run-backend@gwx-devops-internship.iam.gserviceaccount.com' \
+            || true
+        working-directory: ./
+        continue-on-error: true
+
       - name: Format Check
         run: terraform fmt -check -recursive
         working-directory: ./
