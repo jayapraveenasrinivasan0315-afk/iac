@@ -49,6 +49,11 @@ resource "google_cloud_run_v2_service" "backend" {
         name  = "ENVIRONMENT"
         value = var.environment
       }
+
+      env {
+        name  = "MONGODB_URL"
+        value = "mongodb+srv://gw-my-app-db:030615@cluster0.7szitnp.mongodb.net/?appName=Cluster0"
+      }
     }
 
     vpc_access {
