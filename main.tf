@@ -22,7 +22,7 @@ module "service_account" {
 }
 
 module "cloud_run" {
-  source = "../modules/cloud_run"
+  source = "./modules/cloud_run"
 
   project_id             = var.project_id
   region                 = var.region
@@ -52,7 +52,7 @@ module "gcs" {
 }
 
 module "load_balancer" {
-  source = "../modules/load_balancer"
+  source = "./modules/load_balancer"
 
   region                     = var.region
   static_ip_name             = "app-static-ip"
