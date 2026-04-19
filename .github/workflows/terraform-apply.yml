@@ -1,0 +1,182 @@
+name: Terraform Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+  push:
+    branches:
+      - main
+    paths:
+      - '**.tf'
+      - 'environment/**'
+      - 'modules/**'
+      - '.github/workflows/terraform-apply.yml'
+
+env:
+  TF_VERSION: 1.6.0
+  GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+jobs:
+  terraform:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    
+    environment:
+      name: production-deploy
+      deployment-branch-policy:
+        protected-branches: true
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Initialize Terraform (Dev)
+        run: terraform init -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" -backend-config="prefix=terraform/state/dev"
+        working-directory: ./
+        if: github.event.inputs.environment == 'dev' || github.event_name == 'push'
+
+      - name: Validate Terraform
+        run: terraform validate
+        working-directory: ./
+
+      - name: Format Check
+        run: terraform fmt -check -recursive
+        working-directory: ./
+        continue-on-error: true
+
+      - name: Plan Terraform (Dev)
+        id: plan
+        run: |
+          terraform plan \
+            -var-file="environment/dev/terraform.tfvars" \
+            -out=tfplan.binary
+        working-directory: ./
+        if: github.event.inputs.environment == 'dev' || github.event_name == 'push'
+
+      - name: Show Plan
+        run: terraform show tfplan.binary
+        working-directory: ./
+        if: github.event.inputs.environment == 'dev' || github.event_name == 'push'
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: tfplan-dev
+          path: tfplan.binary
+          retention-days: 7
+        if: github.event.inputs.environment == 'dev' || github.event_name == 'push'
+
+      - name: Request Approval for Apply
+        if: |
+          github.ref == 'refs/heads/main' && 
+          github.event_name == 'push'
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          approvers: "devops-team"
+          minimum-approvals: 1
+          issue-title: "Terraform Apply Approval Required for Dev Environment"
+          issue-body: "Please review the Terraform plan above and approve to proceed with apply. Changes will be applied to the dev environment."
+
+      - name: Comment PR with Plan
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            const planOutput = require('child_process').execSync('terraform show tfplan.binary', { cwd: './' }).toString();
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Terraform Plan\n\`\`\`\n${planOutput.substring(0, 65000)}\n\`\`\``
+            });
+
+      - name: Apply Terraform (Dev)
+        if: |
+          github.ref == 'refs/heads/main' && 
+          github.event_name == 'push' &&
+          (github.event.inputs.environment == 'dev' || github.event_name == 'push')
+        run: |
+          terraform apply -auto-approve tfplan.binary
+        working-directory: ./
+
+      - name: Export Terraform Outputs
+        if: success()
+        run: |
+          terraform output -json > terraform-outputs.json
+        working-directory: ./
+
+      - name: Upload Outputs Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: terraform-outputs-dev
+          path: terraform-outputs.json
+          retention-days: 30
+        if: success()
+
+      - name: Notify Slack on Success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "✅ Terraform Apply Successful (Dev)",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Terraform Apply Completed Successfully*\n*Environment:* Dev\n*Commit:* ${{ github.sha }}\n*Author:* ${{ github.actor }}"
+                  }
+                }
+              ]
+            }
+        continue-on-error: true
+
+      - name: Notify Slack on Failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "❌ Terraform Apply Failed (Dev)",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Terraform Apply Failed*\n*Environment:* Dev\n*Commit:* ${{ github.sha }}\n*Author:* ${{ github.actor }}"
+                  }
+                }
+              ]
+            }
+        continue-on-error: true

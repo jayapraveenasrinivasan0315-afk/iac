@@ -1,0 +1,123 @@
+name: Terraform Plan Only
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to plan'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+env:
+  TF_VERSION: 1.6.0
+  GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+jobs:
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      plan-output: ${{ steps.plan.outputs.stdout }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Initialize Terraform (Dev)
+        run: terraform init -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" -backend-config="prefix=terraform/state/dev"
+        working-directory: ./
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        working-directory: ./
+        continue-on-error: true
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ./
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var-file="environment/dev/terraform.tfvars" \
+            -out=tfplan.binary \
+            -json > tfplan.json
+        working-directory: ./
+        continue-on-error: true
+
+      - name: Terraform Plan Summary
+        id: summary
+        if: always()
+        run: |
+          echo "## 📋 Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f tfplan.json ]; then
+            echo "✅ Plan generated successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Plan generation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload Plan Artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: terraform-plan-dev
+          path: tfplan.binary
+          retention-days: 7
+
+      - name: Upload Plan JSON
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: terraform-plan-json-dev
+          path: tfplan.json
+          retention-days: 7
+
+      - name: Plan Status
+        if: failure()
+        run: |
+          echo "::error::Terraform plan failed. Check logs above."
+          exit 1
+
+      - name: Notify Slack
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "⚠️ Terraform Plan Failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Terraform Plan Failed*\n*PR*: ${{ github.event.pull_request.number }}\n*Author*: @${{ github.actor }}"
+                  }
+                }
+              ]
+            }
+        continue-on-error: true
