@@ -64,6 +64,23 @@ jobs:
             vpcaccess.googleapis.com \
             secretmanager.googleapis.com
 
+      - name: Grant Service Account Permissions
+        run: |
+          SA_EMAIL="github-action-cicdsa-482@gwx-devops-internship.iam.gserviceaccount.com"
+          PROJECT="gwx-devops-internship"
+          
+          # Grant Cloud Run permissions
+          gcloud projects add-iam-policy-binding $PROJECT \
+            --member="serviceAccount:$SA_EMAIL" \
+            --role="roles/run.admin" \
+            --condition=None || true
+          
+          # Grant Artifact Registry permissions to pull images
+          gcloud projects add-iam-policy-binding $PROJECT \
+            --member="serviceAccount:$SA_EMAIL" \
+            --role="roles/artifactregistry.reader" \
+            --condition=None || true
+
       - name: Initialize Terraform
         id: init
         env:
