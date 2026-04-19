@@ -26,11 +26,8 @@ resource "google_compute_managed_ssl_certificate" "ssl_cert" {
 resource "google_compute_network_endpoint_group" "cloud_run_neg" {
   name                  = var.cloud_run_neg_name
   network_endpoint_type = "SERVERLESS"
-  region                = var.region
-
-  cloud_run {
-    service = var.cloud_run_service_name
-  }
+  network               = "default"
+  location              = var.region
 }
 
 # Health check for Cloud Run
@@ -74,12 +71,11 @@ resource "google_compute_backend_bucket" "gcs_backend" {
   enable_cdn  = true
 
   cdn_policy {
-    cache_mode              = "CACHE_ALL_STATIC"
-    client_ttl              = 3600
-    default_ttl             = 3600
-    max_ttl                 = 86400
-    negative_caching        = true
-    negative_caching_ttl    = 120
+    cache_mode       = "CACHE_ALL_STATIC"
+    client_ttl       = 3600
+    default_ttl      = 3600
+    max_ttl          = 86400
+    negative_caching = true
   }
 }
 
@@ -140,9 +136,8 @@ resource "google_compute_url_map" "http_redirect" {
   name = var.http_redirect_url_map_name
 
   default_url_redirect {
-    redirect_code        = "301"
-    https_redirect       = true
-    strip_query          = false
+    https_redirect = true
+    strip_query    = false
   }
 }
 
