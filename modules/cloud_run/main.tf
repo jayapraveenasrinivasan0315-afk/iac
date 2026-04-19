@@ -22,7 +22,7 @@ resource "google_cloud_run_v2_service" "backend" {
   name                   = var.cloud_run_service_name
   location               = var.region
   deletion_protection    = false
-  ingress                = "INTERNAL_ONLY"
+  ingress                = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
   scaling {
     max_instance_count = var.max_instances
