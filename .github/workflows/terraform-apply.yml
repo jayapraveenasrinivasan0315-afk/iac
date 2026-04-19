@@ -40,8 +40,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
-           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -69,7 +69,7 @@ jobs:
             -var-file="environment/dev/terraform.tfvars" \
             -out=tfplan.binary
         working-directory: ./
-        if: github.event.inputs.environment == 'dev' 
+        if: github.event.inputs.environment == 'dev'
 
       - name: Show Plan
         run: terraform show tfplan.binary
@@ -82,25 +82,23 @@ jobs:
           name: tfplan-dev
           path: tfplan.binary
           retention-days: 7
-        if: github.event.inputs.environment == 'dev'  
+        if: github.event.inputs.environment == 'dev'
 
       - name: Request Approval for Apply
-        if: |
-          github.ref == 'refs/heads/main' && 
+        if: github.ref == 'refs/heads/main'
         uses: trstringer/manual-approval@v1
         with:
           secret: ${{ secrets.GITHUB_TOKEN }}
           approvers: "devops-team"
           minimum-approvals: 1
           issue-title: "Terraform Apply Approval Required for Dev Environment"
-          issue-body: "Please review the Terraform plan above and approve to proceed with apply. Changes will be applied to the dev environment."
+          issue-body: "Please review the Terraform plan above and approve to proceed with apply."
 
       - name: Comment PR with Plan
         uses: actions/github-script@v6
         if: github.event_name == 'pull_request'
         with:
           script: |
-            const fs = require('fs');
             const planOutput = require('child_process').execSync('terraform show tfplan.binary', { cwd: './' }).toString();
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -111,8 +109,8 @@ jobs:
 
       - name: Apply Terraform (Dev)
         if: |
-          github.ref == 'refs/heads/main' && 
-          (github.event.inputs.environment == 'dev' |
+          github.ref == 'refs/heads/main' &&
+          github.event.inputs.environment == 'dev'
         run: |
           terraform apply -auto-approve tfplan.binary
         working-directory: ./
