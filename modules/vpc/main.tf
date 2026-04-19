@@ -8,7 +8,7 @@ resource "google_compute_subnetwork" "network-with-private" {
   name                     = var.subnet_name
   ip_cidr_range            = var.subnet_ip_cidr_range
   region                   = var.region
-  network                  = google_compute_network.vpc_network
+  network                  = google_compute_network.vpc_network.self_link
   private_ip_google_access = true
 }
 resource "google_vpc_access_connector" "connector" {
