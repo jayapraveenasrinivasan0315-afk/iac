@@ -14,7 +14,6 @@ on:
 
 env:
   TF_VERSION: 1.6.0
-  GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
 jobs:
   terraform-plan:
@@ -116,7 +115,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*Terraform Plan Failed*\n*PR*: ${{ github.event.pull_request.number }}\n*Author*: @${{ github.actor }}"
+                    "text": "*Terraform Plan Failed*\n*PR*: ${{github.event.pull_request.number}}\n*Author*: @${{ github.actor }}"
                   }
                 }
               ]
