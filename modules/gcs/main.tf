@@ -40,3 +40,12 @@ resource "google_storage_bucket_iam_binding" "public_read" {
     "allUsers"
   ]
 }
+
+# Upload frontend files to GCS
+resource "google_storage_bucket_object" "frontend_files" {
+  for_each = fileset("${path.module}/../../github_tasks/frontend", "**")
+  
+  bucket = google_storage_bucket.frontend_bucket.name
+  name   = each.value
+  source = "${path.module}/../../github_tasks/frontend/${each.value}"
+}
