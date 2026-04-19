@@ -16,22 +16,19 @@ on:
         required: true
 
 env:
-  TF_VERSION: 1.6.0
-  GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+  TF_VERSION: 1.10.5
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  environment: ${{ github.event.inputs.environment }}
 
 jobs:
   terraform-destroy:
     name: Terraform Destroy
     runs-on: ubuntu-latest
-    
+    environment: ${{ github.event.inputs.environment }}
+
     permissions:
       contents: read
       id-token: write
-
-    environment:
-      name: ${{ github.event.inputs.environment }}-destroy
-      deployment-branch-policy:
-        protected-branches: true
 
     steps:
       - name: Validate Confirmation
@@ -51,12 +48,15 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
+        uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          PROJECT_ID: ${{ env.PROJECT_ID }}
 
       - name: Initialize Terraform
         run: |
@@ -65,107 +65,4 @@ jobs:
           elif [ "${{ github.event.inputs.environment }}" == "staging" ]; then
             terraform init -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" -backend-config="prefix=terraform/state/staging"
           elif [ "${{ github.event.inputs.environment }}" == "prod" ]; then
-            terraform init -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" -backend-config="prefix=terraform/state/prod"
-          fi
-        working-directory: ./
-
-      - name: Validate Terraform
-        run: terraform validate
-        working-directory: ./
-
-      - name: Create Destroy Plan
-        id: destroy_plan
-        run: |
-          if [ "${{ github.event.inputs.environment }}" == "dev" ]; then
-            terraform plan -destroy -var-file="environment/dev/terraform.tfvars" -out=destroy.tfplan
-          fi
-        working-directory: ./
-
-      - name: Show Destroy Plan
-        run: terraform show destroy.tfplan
-        working-directory: ./
-
-      - name: Upload Destroy Plan
-        uses: actions/upload-artifact@v3
-        with:
-          name: destroy-plan-${{ github.event.inputs.environment }}
-          path: destroy.tfplan
-          retention-days: 7
-
-      - name: Notify Slack - Destroy Started
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "⚠️ Terraform Destroy Started (${{ github.event.inputs.environment }})",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Terraform Destroy Initiated*\n*Environment:* ${{ github.event.inputs.environment }}\n*User:* ${{ github.actor }}\n*This action is DESTRUCTIVE and will remove resources!*"
-                  }
-                }
-              ]
-            }
-        continue-on-error: true
-
-      - name: Approve Destroy Manual Step
-        uses: softprops/action-gh-release@v1
-        if: false
-        with:
-          generate_release_notes: false
-
-      - name: Execute Destroy
-        run: |
-          if [ "${{ github.event.inputs.environment }}" == "dev" ]; then
-            terraform destroy -auto-approve -var-file="environment/dev/terraform.tfvars"
-          fi
-        working-directory: ./
-
-      - name: Backup State Before Destroy
-        if: always()
-        run: |
-          gsutil cp gs://${{ secrets.GCP_TF_STATE_BUCKET }}/terraform/state/${{ github.event.inputs.environment }}/default.tfstate \
-            gs://${{ secrets.GCP_TF_STATE_BUCKET }}/backups/terraform-state-${{ github.event.inputs.environment }}-$(date +%s).tfstate || true
-
-      - name: Notify Slack on Success
-        if: success()
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "✅ Terraform Destroy Completed (${{ github.event.inputs.environment }})",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Terraform Destroy Completed Successfully*\n*Environment:* ${{ github.event.inputs.environment }}\n*Commit:* ${{ github.sha }}\n*User:* ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
-        continue-on-error: true
-
-      - name: Notify Slack on Failure
-        if: failure()
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "❌ Terraform Destroy Failed (${{ github.event.inputs.environment }})",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Terraform Destroy Failed*\n*Environment:* ${{ github.event.inputs.environment }}\n*Commit:* ${{ github.sha }}\n*User:* ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
-        continue-on-error: true
+            terraform init -backend-config="bucket=$
