@@ -1,18 +1,4 @@
 # state.tf
-resource "google_storage_bucket" "tf_state" {
-  name                        = "my-terraform-state-bucket-01"
-  location                    = "ASIA-SOUTH1"
-  uniform_bucket_level_access = true
-
-  versioning {
-    enabled = true
-  }
-
-  labels = merge(local.labels, {
-    managed-by = "terraform"
-  })
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
+# The Terraform state bucket is created and managed manually
+# This file is reserved for state-related configuration
+# The bucket must exist before terraform init runs
