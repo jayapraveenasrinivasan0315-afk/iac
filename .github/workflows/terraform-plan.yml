@@ -13,7 +13,7 @@ on:
           - prod
 
 env:
-  TF_VERSION: 1.6.0
+  TF_VERSION: 1.10.5
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   environment: ${{ github.event.inputs.environment }}
 jobs:
