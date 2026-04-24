@@ -16,6 +16,7 @@ env:
   TF_VERSION: 1.10.5
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   environment: ${{ github.event.inputs.environment }}
+
 jobs:
   terraform-plan:
     name: Terraform Plan
@@ -41,8 +42,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
-           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -68,21 +69,8 @@ jobs:
           terraform plan \
             -var-file="environment/${{ env.environment }}/terraform.tfvars" \
             -out=tfplan.binary \
-            -json > tfplan.json
         working-directory: ./
         continue-on-error: true
-
-      - name: Terraform Plan Summary
-        id: summary
-        if: always()
-        run: |
-          echo "## 📋 Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f tfplan.json ]; then
-            echo "✅ Plan generated successfully" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ Plan generation failed" >> $GITHUB_STEP_SUMMARY
-          fi
 
       - name: Upload Plan Artifact
         if: always()
@@ -91,37 +79,3 @@ jobs:
           name: terraform-plan-${{ env.environment }}
           path: tfplan.binary
           retention-days: 7
-
-      - name: Upload Plan JSON
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan-json-${{ env.environment }}
-          path: tfplan.json
-          retention-days: 7
-
-      - name: Plan Status
-        if: failure()
-        run: |
-          echo "::error::Terraform plan failed. Check logs above."
-          exit 1
-
-      - name: Notify Slack
-        if: failure()
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "⚠️ Terraform Plan Failed",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Terraform Plan Failed*\n*PR*: ${{github.event.pull_request.number}}\n*Author*: @${{ github.actor }}"
-                  }
-                }
-              ]
-            }
-        continue-on-error: true
