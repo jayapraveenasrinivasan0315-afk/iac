@@ -49,8 +49,8 @@ jobs:
         with:
           PROJECT_ID: ${{ env.PROJECT_ID }}
 
-      - name: Initialize Terraform (Dev)
-        run: terraform init -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" -backend-config="prefix=terraform/state/dev"
+      - name: Initialize Terraform
+        run: terraform init -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" -backend-config="prefix=terraform/state/${{ env.environment }}"
         working-directory: ./
 
       - name: Terraform Format Check
@@ -66,7 +66,7 @@ jobs:
         id: plan
         run: |
           terraform plan \
-            -var-file="environment/dev/terraform.tfvars" \
+            -var-file="environment/${{ env.environment }}/terraform.tfvars" \
             -out=tfplan.binary \
             -json > tfplan.json
         working-directory: ./
@@ -88,7 +88,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-plan-dev
+          name: terraform-plan-${{ env.environment }}
           path: tfplan.binary
           retention-days: 7
 
@@ -96,7 +96,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-plan-json-dev
+          name: terraform-plan-json-${{ env.environment }}
           path: tfplan.json
           retention-days: 7
 

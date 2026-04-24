@@ -6,63 +6,56 @@ on:
       environment:
         description: 'Environment to destroy'
         required: true
+        default: 'development'
         type: choice
         options:
-          - dev
+          - development
           - staging
-          - prod
-      confirmation:
-        description: 'Type "destroy" to confirm'
+          - production
+      target:
+        description: 'Target resource to destroy'
         required: true
+        type: choice
+        options:
+          - all
+          - buckets
+          - cloud_run
 
-env:
-  TF_VERSION: 1.10.5
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  environment: ${{ github.event.inputs.environment }}
+permissions:
+  contents: read
+  id-token: write
+  security-events: write
 
 jobs:
-  terraform-destroy:
-    name: Terraform Destroy
+  destroy:
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}
-
-    permissions:
-      contents: read
-      id-token: write
-
+    environment: ${{ github.event.inputs.environment }}  # ← manual approval via environment protection rule
     steps:
-      - name: Validate Confirmation
-        run: |
-          if [ "${{ github.event.inputs.confirmation }}" != "destroy" ]; then
-            echo "❌ Confirmation not provided. Type 'destroy' to confirm."
-            exit 1
-          fi
-          echo "✅ Destruction confirmed for ${{ github.event.inputs.environment }}"
-
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
+        uses: hashicorp/setup-terraform@v3
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          create_credentials_file: true        # ← fixes getAccessToken error
+          export_environment_variables: true   # ← fixes getAccessToken error
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          PROJECT_ID: ${{ env.PROJECT_ID }}
-
-      - name: Initialize Terraform
+      - name: Terraform Init
         run: |
-          if [ "${{ github.event.inputs.environment }}" == "dev" ]; then
-            terraform init -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" -backend-config="prefix=terraform/state/dev"
-          elif [ "${{ github.event.inputs.environment }}" == "staging" ]; then
-            terraform init -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" -backend-config="prefix=terraform/state/staging"
-          elif [ "${{ github.event.inputs.environment }}" == "prod" ]; then
-            terraform init -backend-config="bucket=$
+          terraform init \
+            -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/state/dev"
+        working-directory: ./
+      - name: Terraform Destroy (all)
+        if: ${{ github.event.inputs.target == 'all' }}
+        run: |
+          terraform destroy \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+        working-directory: ./

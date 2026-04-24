@@ -13,7 +13,7 @@ on:
           - staging
           - prod
       plan_run_number:
-        description: 'Run number of the plan workflow to apply (leave empty to run plan inline)'
+        description: 'Run number of the terraform-plan workflow (optional: uses latest if not specified)'
         required: false
         type: string
 
@@ -137,41 +137,24 @@ jobs:
         working-directory: ./
         continue-on-error: true
 
-      # --- Path A: Download pre-built plan from a separate plan workflow run ---
       - name: Download Plan Artifact
-        if: github.event.inputs.plan_run_number != ''
+        id: download_plan
         uses: dawidd6/action-download-artifact@v3
         with:
           workflow: terraform-plan.yml
           run_number: ${{ github.event.inputs.plan_run_number }}
-          name: tfplan-${{ github.event.inputs.environment }}-${{ github.event.inputs.plan_run_number }}
+          name: terraform-plan-${{ github.event.inputs.environment }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      # --- Path B: Run plan inline if no plan_run_number provided ---
-      - name: Plan Terraform (inline)
-        id: plan
-        if: github.event.inputs.plan_run_number == ''
-        run: |
-          terraform plan \
-            -var-file="environment/${{ github.event.inputs.environment }}/terraform.tfvars" \
-            -out=tfplan \
-            -input=false
-        working-directory: ./
-
-      - name: Upload Plan Artifact
-        if: github.event.inputs.plan_run_number == ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-${{ github.event.inputs.environment }}
-          path: tfplan
-          retention-days: 7
+          search_artifacts: true
 
       - name: Show Plan
         run: |
+          # Display the binary plan format
+          terraform show tfplan.binary > plan-output.txt
           echo "## Plan to be Applied" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo '```terraform' >> $GITHUB_STEP_SUMMARY
-          terraform show tfplan >> $GITHUB_STEP_SUMMARY
+          cat plan-output.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
         working-directory: ./
 
@@ -180,12 +163,18 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           script: |
-            const planOutput = require('child_process').execSync('terraform show tfplan', { cwd: './' }).toString();
+            const fs = require('fs');
+            let planOutput = '';
+            try {
+              planOutput = fs.readFileSync('plan-output.txt', 'utf8');
+            } catch (e) {
+              planOutput = 'Plan output not available';
+            }
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## Terraform Plan\n\`\`\`\n${planOutput.substring(0, 65000)}\n\`\`\``
+              body: `## Terraform Plan for ${{ github.event.inputs.environment }}\n\`\`\`\n${planOutput.substring(0, 65000)}\n\`\`\``
             });
 
       - name: Apply Terraform
@@ -194,7 +183,7 @@ jobs:
           terraform apply \
             -auto-approve \
             -input=false \
-            tfplan
+            tfplan.binary
         working-directory: ./
 
       - name: Export Terraform Outputs
@@ -217,8 +206,9 @@ jobs:
           echo "## Terraform Apply Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Plan Run Number:** ${{ github.event.inputs.plan_run_number || 'inline' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Plan Run Number:** ${{ github.event.inputs.plan_run_number || 'latest' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Init:** ${{ steps.init.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Download Plan:** ${{ steps.download_plan.outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Apply:** ${{ steps.apply.outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.apply.outcome }}" == "success" ]; then
