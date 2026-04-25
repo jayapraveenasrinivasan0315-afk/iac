@@ -18,8 +18,12 @@ on:
         type: choice
         options:
           - all
-          - buckets
+          - ssl_cert_only
+          - load_balancer
           - cloud_run
+          - gcs
+          - vpc
+          - iam
 
 permissions:
   contents: read
@@ -30,6 +34,7 @@ jobs:
   destroy:
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}  # ← manual approval via environment protection rule
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,8 +48,8 @@ jobs:
           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           project_id: ${{ secrets.GCP_PROJECT_ID }}
-          create_credentials_file: true        # ← fixes getAccessToken error
-          export_environment_variables: true   # ← fixes getAccessToken error
+          create_credentials_file: true
+          export_environment_variables: true
 
       - name: Terraform Init
         run: |
@@ -52,6 +57,214 @@ jobs:
             -backend-config="bucket=${{ secrets.GCP_TF_STATE_BUCKET }}" \
             -backend-config="prefix=terraform/state/dev"
         working-directory: ./
+
+      # ─────────────────────────────────────────────
+      # TARGET: ssl_cert_only
+      # Use case: fix wrong domain (yourdomain.com → real domain)
+      # From state: app-ssl-cert has yourdomain.com / www.yourdomain.com
+      # ─────────────────────────────────────────────
+      - name: Destroy SSL Cert Only (fix domain)
+        if: ${{ github.event.inputs.target == 'ssl_cert_only' }}
+        run: |
+          # Step 1: Detach HTTPS proxy (holds the cert, must go first)
+          terraform destroy \
+            -target=module.load_balancer.google_compute_target_https_proxy.https_proxy \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 2: Destroy the SSL cert (app-ssl-cert)
+          terraform destroy \
+            -target=module.load_balancer.google_compute_managed_ssl_certificate.ssl_cert \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 3: Recreate proxy + cert with updated var.domains
+          terraform apply \
+            -target=module.load_balancer.google_compute_managed_ssl_certificate.ssl_cert \
+            -target=module.load_balancer.google_compute_target_https_proxy.https_proxy \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+        working-directory: ./
+
+      # ─────────────────────────────────────────────
+      # TARGET: load_balancer
+      # Destroys all LB resources in correct dependency order:
+      # forwarding rules → proxies → ssl cert → url maps → backends → neg → static ip
+      # Static IP: app-static-ip (34.111.210.87) has prevent_destroy=true — skipped
+      # ─────────────────────────────────────────────
+      - name: Destroy Load Balancer
+        if: ${{ github.event.inputs.target == 'load_balancer' }}
+        run: |
+          # Step 1: Forwarding rules (entry points)
+          terraform destroy \
+            -target=module.load_balancer.google_compute_global_forwarding_rule.https_forwarding_rule \
+            -target=module.load_balancer.google_compute_global_forwarding_rule.http_forwarding_rule \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 2: Target proxies
+          terraform destroy \
+            -target=module.load_balancer.google_compute_target_https_proxy.https_proxy \
+            -target=module.load_balancer.google_compute_target_http_proxy.http_proxy \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 3: SSL cert (app-ssl-cert)
+          terraform destroy \
+            -target=module.load_balancer.google_compute_managed_ssl_certificate.ssl_cert \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 4: URL maps (https-lb-url-map + http-redirect)
+          terraform destroy \
+            -target=module.load_balancer.google_compute_url_map.https_lb_url_map \
+            -target=module.load_balancer.google_compute_url_map.http_redirect \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 5: Backend service (cloud-run-backend) + backend bucket (gcs-backend)
+          terraform destroy \
+            -target=module.load_balancer.google_compute_backend_service.backend \
+            -target=module.load_balancer.google_compute_backend_bucket.gcs_backend \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 6: Serverless NEG (cloud-run-neg → backend-service in asia-south1)
+          terraform destroy \
+            -target=module.load_balancer.google_compute_region_network_endpoint_group.cloud_run_neg \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # NOTE: Static IP (app-static-ip / 34.111.210.87) has prevent_destroy=true
+          # Remove lifecycle block in .tf file before destroying it manually
+        working-directory: ./
+
+      # ─────────────────────────────────────────────
+      # TARGET: cloud_run
+      # Destroys Cloud Run service + IAM bindings
+      # Service: backend-service (asia-south1), ingress: INTERNAL_ONLY
+      # SA: cloud-run-backend@gwx-devops-internship.iam.gserviceaccount.com
+      # VPC connector: vpc-connector, egress: ALL_TRAFFIC
+      # ─────────────────────────────────────────────
+      - name: Destroy Cloud Run
+        if: ${{ github.event.inputs.target == 'cloud_run' }}
+        run: |
+          # Step 1: Remove IAM bindings from Cloud Run SA
+          terraform destroy \
+            -target=module.cloud_run.google_project_iam_member.secret_accessor \
+            -target=module.cloud_run.google_project_iam_member.cloud_sql_client \
+            -target=module.cloud_run.google_project_iam_member.artifact_registry_reader \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 2: Destroy Cloud Run service (backend-service)
+          terraform destroy \
+            -target=module.cloud_run.google_cloud_run_v2_service.backend \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+        working-directory: ./
+
+      # ─────────────────────────────────────────────
+      # TARGET: gcs
+      # Destroys GCS bucket + public IAM binding
+      # Bucket: gw-devops-frontend-bucket (ASIA-SOUTH1)
+      # uniform_bucket_level_access: true, force_destroy: true
+      # ─────────────────────────────────────────────
+      - name: Destroy GCS
+        if: ${{ github.event.inputs.target == 'gcs' }}
+        run: |
+          # Step 1: Remove public IAM binding (allUsers → storage.objectViewer)
+          terraform destroy \
+            -target=module.gcs.google_storage_bucket_iam_binding.public_read \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 2: Destroy bucket (gw-devops-frontend-bucket)
+          terraform destroy \
+            -target=module.gcs.google_storage_bucket.frontend_bucket \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+        working-directory: ./
+
+      # ─────────────────────────────────────────────
+      # TARGET: vpc
+      # Destroys VPC connector, NAT, router, subnet, VPC network
+      # VPC: vpc (10.0.0.0/24), connector: vpc-connector (10.8.0.0/28)
+      # NAT: auto IP allocation, router: router (asia-south1)
+      # ─────────────────────────────────────────────
+      - name: Destroy VPC
+        if: ${{ github.event.inputs.target == 'vpc' }}
+        run: |
+          # Step 1: VPC Access Connector (vpc-connector)
+          terraform destroy \
+            -target=module.vpc.google_vpc_access_connector.connector \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 2: NAT gateway
+          terraform destroy \
+            -target=module.vpc.google_compute_router_nat.nat \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 3: Router
+          terraform destroy \
+            -target=module.vpc.google_compute_router.router \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 4: Subnet (subnet / 10.0.0.0/24)
+          terraform destroy \
+            -target=module.vpc.google_compute_subnetwork.network-with-private \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Step 5: VPC network
+          terraform destroy \
+            -target=module.vpc.google_compute_network.vpc_network \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+        working-directory: ./
+
+      # ─────────────────────────────────────────────
+      # TARGET: iam
+      # Destroys all IAM bindings for:
+      # - cloud-run-backend SA
+      # - github-action-cicdsa-482 SA
+      # ─────────────────────────────────────────────
+      - name: Destroy IAM
+        if: ${{ github.event.inputs.target == 'iam' }}
+        run: |
+          # GitHub Actions SA IAM bindings
+          terraform destroy \
+            -target=google_project_iam_member.github_actions_artifact_registry_admin \
+            -target=google_project_iam_member.github_actions_artifact_registry_reader \
+            -target=google_project_iam_member.github_actions_run_admin \
+            -target=google_project_iam_member.github_actions_sa_user \
+            -target=google_project_iam_member.github_actions_storage_admin \
+            -target=google_project_iam_member.github_actions_token_creator \
+            -target=google_project_iam_member.cloud_run_sa_artifact_registry \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # SA user binding (github-actions-sa → cloud-run-backend SA)
+          terraform destroy \
+            -target=google_service_account_iam_member.github_actions_sa_user_on_cloud_run_sa \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+
+          # Service Account itself
+          terraform destroy \
+            -target=module.service_account.google_service_account.main \
+            -var-file="environment/dev/terraform.tfvars" \
+            -auto-approve
+        working-directory: ./
+
+      # ─────────────────────────────────────────────
+      # TARGET: all
+      # Full destroy in correct dependency order
+      # NOTE: Remove prevent_destroy on static IP before running this
+      # ─────────────────────────────────────────────
       - name: Terraform Destroy (all)
         if: ${{ github.event.inputs.target == 'all' }}
         run: |
