@@ -6,12 +6,12 @@ on:
       environment:
         description: 'Environment to destroy'
         required: true
-        default: 'development'
+        default: 'dev'
         type: choice
         options:
-          - development
+          - dev
           - staging
-          - production
+          - prod
       target:
         description: 'Target resource to destroy'
         required: true
