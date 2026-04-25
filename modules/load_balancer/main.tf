@@ -15,6 +15,9 @@
     managed {
       domains = var.domains
     }
+    lifecycle{
+      create_before_destroy = true
+    }
   }
 
   # Network Endpoint Group for Cloud Run (Serverless NEG)
