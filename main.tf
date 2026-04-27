@@ -19,11 +19,10 @@ module "vpc" {
   nat_name                = var.nat_name
 }
 
-module "service_account" {
-  source = "./modules/service_account"
-
-  account_id   = "cloud-run-backend"
-  display_name = "Cloud Run Backend Service Account"
+# Reference existing service account instead of creating new one
+data "google_service_account" "cloud_run_backend" {
+  account_id = "cloud-run-backend"
+  project    = var.project_id
 }
 
 module "cloud_sql" {
@@ -49,11 +48,10 @@ module "secret_manager" {
   sql_instance_name    = var.sql_instance_name
   database_user       = var.database_user
   database_name       = var.database_name
-  service_account_email = "${module.service_account.service_account_email}"
+  service_account_email = data.google_service_account.cloud_run_backend.email
 
   depends_on = [
-    module.cloud_sql,
-    module.service_account
+    module.cloud_sql
   ]
 }
 
@@ -74,7 +72,6 @@ module "cloud_run" {
 
   depends_on = [
     module.vpc,
-    module.service_account,
     module.secret_manager
   ]
 }
@@ -163,5 +160,4 @@ resource "google_service_account_iam_member" "github_actions_sa_user_on_cloud_ru
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:github-action-cicdsa-482@${var.project_id}.iam.gserviceaccount.com"
 
-  depends_on = [module.service_account]
-}
+  }
