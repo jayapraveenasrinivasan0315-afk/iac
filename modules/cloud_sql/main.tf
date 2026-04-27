@@ -18,7 +18,7 @@ resource "google_sql_database_instance" "main" {
     
     ip_configuration {
       ipv4_enabled   = false
-      private_network = "projects/gwx-devops-internship/global/networks/default"
+      private_network = var.vpc_network
     }
     
     backup_configuration {
@@ -31,6 +31,8 @@ resource "google_sql_database_instance" "main" {
       }
     }
   }
+
+  depends_on = [var.psa_connection]
 }
 
 

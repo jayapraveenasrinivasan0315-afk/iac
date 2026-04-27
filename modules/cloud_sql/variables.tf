@@ -22,3 +22,8 @@ variable "database_user" {
   type = string
 }
 
+variable "psa_connection" {
+  description = "Private Service Access connection dependency"
+  type        = string
+}
+

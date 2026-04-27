@@ -37,3 +37,13 @@ output "nat_name" {
   description = "Cloud NAT name"
   value       = google_compute_router_nat.nat.name
 }
+
+output "vpc_network_self_link" {
+  description = "VPC network self link"
+  value       = google_compute_network.vpc_network.self_link
+}
+
+output "private_vpc_connection" {
+  description = "Private Service Access connection"
+  value       = google_service_networking_connection.private_vpc_connection
+}

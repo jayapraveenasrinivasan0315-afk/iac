@@ -4,6 +4,33 @@ resource "google_compute_network" "vpc_network" {
   auto_create_subnetworks = false
   mtu                     = 1460
 }
+
+# Enable Service Networking API for Private Service Access
+resource "google_project_service" "service_networking" {
+  service            = "servicenetworking.googleapis.com"
+  project            = var.project_id
+  disable_on_destroy = false
+}
+
+# Reserve private IP range for Google managed services
+resource "google_compute_global_address" "private_ip_range" {
+  name          = "google-managed-services-range"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  prefix_length = 16
+  network       = google_compute_network.vpc_network.id
+  project       = var.project_id
+}
+
+# Create Private Service Access peering connection
+resource "google_service_networking_connection" "private_vpc_connection" {
+  network                 = google_compute_network.vpc_network.id
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [google_compute_global_address.private_ip_range.name]
+
+  depends_on = [google_project_service.service_networking]
+}
+
 resource "google_compute_subnetwork" "network-with-private" {
   name                     = var.subnet_name
   ip_cidr_range            = var.subnet_ip_cidr_range

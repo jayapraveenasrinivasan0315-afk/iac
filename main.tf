@@ -31,9 +31,10 @@ module "cloud_sql" {
   sql_instance_name = var.sql_instance_name
   db_version        = var.db_version
   region            = var.region
-  vpc_network       = module.vpc.vpc_id
+  vpc_network       = module.vpc.vpc_network_self_link
   database_name     = var.database_name
   database_user     = var.database_user
+  psa_connection    = module.vpc.private_vpc_connection.id
 
   depends_on = [
     module.vpc
