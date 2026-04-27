@@ -62,7 +62,8 @@ jobs:
             storage.googleapis.com \
             iam.googleapis.com \
             vpcaccess.googleapis.com \
-            secretmanager.googleapis.com
+            secretmanager.googleapis.com \
+            sqladmin.googleapis.com
 
       - name: Grant Service Account Permissions
         run: |
