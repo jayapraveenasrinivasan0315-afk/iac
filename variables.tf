@@ -128,14 +128,3 @@ variable "database_user" {
   description = "Database username"
   type        = string
 }
-
-variable "secure_password" {
-  description = "Database password"
-  type        = string
-  sensitive   = true
-}
-
-variable "db_url_secret_id" {
-  description = "Secret Manager ID for DB URL"
-  type        = string
-}

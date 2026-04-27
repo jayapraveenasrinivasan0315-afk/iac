@@ -22,6 +22,3 @@ variable "database_user" {
   type = string
 }
 
-variable "secure_password" {
-  type = string
-}

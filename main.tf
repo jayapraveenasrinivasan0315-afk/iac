@@ -26,6 +26,37 @@ module "service_account" {
   display_name = "Cloud Run Backend Service Account"
 }
 
+module "cloud_sql" {
+  source = "./modules/cloud_sql"
+
+  sql_instance_name = var.sql_instance_name
+  db_version        = var.db_version
+  region            = var.region
+  vpc_network       = module.vpc.vpc_id
+  database_name     = var.database_name
+  database_user     = var.database_user
+
+  depends_on = [
+    module.vpc
+  ]
+}
+
+module "secret_manager" {
+  source = "./modules/secret_manager"
+
+  project_id           = var.project_id
+  environment          = var.environment
+  sql_instance_name    = var.sql_instance_name
+  database_user       = var.database_user
+  database_name       = var.database_name
+  service_account_email = "${module.service_account.service_account_email}"
+
+  depends_on = [
+    module.cloud_sql,
+    module.service_account
+  ]
+}
+
 module "cloud_run" {
   source = "./modules/cloud_run"
 
@@ -39,11 +70,12 @@ module "cloud_run" {
   min_instances          = var.min_instances
   max_instances          = var.max_instances
   environment            = var.environment
-  db_url_secret_id       = var.db_url_secret_id
+  db_url_secret_id       = module.secret_manager.db_url_secret_id
 
   depends_on = [
     module.vpc,
-    module.service_account
+    module.service_account,
+    module.secret_manager
   ]
 }
 

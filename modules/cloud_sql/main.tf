@@ -1,3 +1,9 @@
+# Generate secure random password
+resource "random_password" "db_password" {
+  length  = 32
+  special = true
+}
+
 resource "google_sql_database_instance" "main" {
   name             = var.sql_instance_name
   database_version = var.db_version
@@ -36,5 +42,5 @@ resource "google_sql_database" "myapp" {
 resource "google_sql_user" "myapp" {
   name     = var.database_user
   instance = google_sql_database_instance.main.name
-  password = var.secure_password
+  password = random_password.db_password.result
 }
